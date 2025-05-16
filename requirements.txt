@@ -6,4 +6,5 @@ seaborn==0.12.2
 scikit-learn==1.2.2
 seqeval==1.2.2
 python-crfsuite==0.9.9
+nltk>=3.8.1
 id_nusantara-1.1.tar.gz
