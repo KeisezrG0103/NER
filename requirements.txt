@@ -1,8 +1,9 @@
-streamlit
-pandas
-matplotlib
-seaborn
-scikit-learn
-seqeval
-python-crfsuite
+streamlit==1.33.0
+numpy==1.24.4
+pandas==1.5.3
+matplotlib==3.7.1
+seaborn==0.12.2
+scikit-learn==1.2.2
+seqeval==1.2.2
+python-crfsuite==0.9.9
 id_nusantara-1.1.tar.gz
