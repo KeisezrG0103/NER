@@ -32,7 +32,7 @@ if not os.path.exists("models"):
 st.sidebar.title("NER Analysis")
 page = st.sidebar.selectbox(
     "Choose a page",
-    ["Data Explorer", "Model Training", "Model Evaluation", "Interactive Annotation"],
+    ["Data Explorer", "Model Training", "Model Evaluation", "Analysis text"],
 )
 
 
@@ -679,215 +679,6 @@ if page == "Data Explorer":
                 st.info(f"Showing first 100 words out of {len(tokens)} total words.")
             st.markdown("---")
 
-
-# if page == "Data Explorer":
-#     st.title("Data Explorer")
-#     uploaded_file = st.file_uploader(
-#         "Upload text file to analyze", 
-#         type=["txt"],
-#         key="interactive_annotation_uploader"  # Add this line
-#     )
-
-#     if uploaded_file is not None:
-#         # Save the file temporarily
-#         with open("temp_data.txt", "wb") as f:
-#             f.write(uploaded_file.getvalue())
-
-#         # Load the data
-#         df = load_ner_data_from_txt("temp_data.txt")
-#         df["sentence"] = df.isnull().all(axis=1).cumsum()
-
-#         # Show basic info
-#         st.subheader("Data Overview")
-#         col1, col2, col3 = st.columns(3)
-#         with col1:
-#             st.metric("Total Tokens", df.shape[0])
-#         with col2:
-#             st.metric("Sentences", df["sentence"].max() + 1)
-#         with col3:
-#             entity_count = df["tag"].nunique() - (1 if df["tag"].isna().any() else 0)
-#             st.metric("Entity Types", entity_count)
-
-#         # Show tag distribution
-#         st.subheader("Entity Tag Distribution")
-#         # Filter out NaN values for the chart
-#         tag_counts = df["tag"].dropna().value_counts()
-#         if not tag_counts.empty:
-#             fig, ax = plt.subplots(figsize=(10, 6))
-#             tag_counts.plot(kind="bar", ax=ax)
-#             st.pyplot(fig)
-
-#         # POS Tagging Option
-#         st.subheader("POS Tagging with SpaCy Nusantara")
-#         use_pos_tagging = st.checkbox(
-#             "Add POS tags using SpaCy id_nusantara model", value=True
-#         )
-
-#         # Create structured dataframe
-#         structured_df = df.copy()
-#         structured_df["pos"] = ""  # Initialize pos column
-
-#         # Add POS tags if requested
-#         if use_pos_tagging:
-#             with st.spinner("Processing POS tags with SpaCy id_nusantara..."):
-#                 # Try loading the model
-#                 try:
-#                     nlp = spacy.load("id_nusantara")
-#                     st.success("Successfully loaded id_nusantara model")
-#                 except:
-#                     st.warning("Downloading id_nusantara model (this might take a while the first time)...")
-#                     try:
-#                         spacy.cli.download("id_nusantara")
-#                         nlp = spacy.load("id_nusantara")
-#                         st.success("Successfully downloaded and loaded id_nusantara model")
-#                     except Exception as e:
-#                         st.error(f"Error loading SpaCy model: {e}")
-#                         st.warning("Proceeding without POS tagging")
-#                         use_pos_tagging = False
-                
-#                 if use_pos_tagging:
-#                     # Initialize stats tracking
-#                     total_tokens = 0
-#                     matched_tokens = 0
-                    
-#                     # Process each sentence group
-#                     progress_bar = st.progress(0)
-#                     sentence_groups = structured_df.groupby("sentence")
-#                     total_sentences = len(sentence_groups)
-                    
-#                     for i, (sentence_id, group) in enumerate(sentence_groups):
-#                         # Skip empty rows
-#                         if group.isnull().all(axis=1).any():
-#                             continue
-                            
-#                         # Get words for this sentence
-#                         words = group["word"].fillna("").tolist()
-#                         sentence_text = " ".join(words)
-                        
-#                         # Skip empty sentences
-#                         if not sentence_text.strip():
-#                             continue
-                            
-#                         # Process with spaCy
-#                         doc = nlp(sentence_text)
-                        
-#                         # Match tokens back to DataFrame rows
-#                         token_index = 0
-#                         for j, row_idx in enumerate(group.index):
-#                             if j < len(doc) and token_index < len(doc):
-#                                 # Try to match tokens with words
-#                                 if (str(doc[token_index]).lower() == 
-#                                     str(structured_df.loc[row_idx, "word"]).lower()):
-#                                     structured_df.loc[row_idx, "pos"] = doc[token_index].pos_
-#                                     token_index += 1
-#                                     matched_tokens += 1
-#                                 else:
-#                                     # For words that don't align perfectly
-#                                     structured_df.loc[row_idx, "pos"] = doc[j].pos_ if j < len(doc) else ""
-#                             else:
-#                                 structured_df.loc[row_idx, "pos"] = ""
-                            
-#                             total_tokens += 1
-                        
-#                         # Update progress bar
-#                         progress_bar.progress((i + 1) / total_sentences)
-                    
-#                     # Summary statistics
-#                     match_rate = matched_tokens / total_tokens if total_tokens > 0 else 0
-#                     st.metric("POS Tagging Match Rate", f"{match_rate:.2%}")
-                    
-#                     # Show POS tag distribution
-#                     pos_counts = structured_df["pos"].value_counts()
-#                     if not pos_counts.empty:
-#                         st.subheader("POS Tag Distribution")
-#                         fig, ax = plt.subplots(figsize=(10, 6))
-#                         pos_counts.head(10).plot(kind="bar", ax=ax)
-#                         plt.title("Top 10 POS Tags")
-#                         st.pyplot(fig)
-
-#         # Show sample data
-#         structured_df = structured_df[["word", "pos", "tag", "sentence"]]
-#         st.subheader("Sample Data")
-#         st.dataframe(structured_df.head(20))
-
-#         # Data type selection and save option
-#         if use_pos_tagging:
-#             st.subheader("Save Processed Data")
-
-#             # Add dataset type selection
-#             dataset_type = st.radio(
-#                 "Select dataset type",
-#                 ["train", "test"],
-#                 help="Specify whether this data will be used for training or testing",
-#             )
-
-#             # Generate suggested filename based on selection
-#             default_filename = f"{dataset_type}_data_with_pos.csv"
-#             save_filename = st.text_input("Filename to save POS-tagged data", default_filename)
-
-#             if st.button("Save Data for Model Training/Evaluation"):
-#                 structured_df.to_csv(save_filename, index=False)
-#                 st.success(f"Data saved as {save_filename}")
-
-#                 # Create a download link
-#                 csv = structured_df.to_csv(index=False).encode()
-#                 b64 = base64.b64encode(csv).decode()
-#                 href = f'<a href="data:file/csv;base64,{b64}" download="{save_filename}">Download CSV file</a>'
-#                 st.markdown(href, unsafe_allow_html=True)
-
-#                 # Display information about next steps
-#                 if dataset_type == "train":
-#                     st.info("You can now use this data file in the 'Model Training' section.")
-#                 else:
-#                     st.info("You can now use this data file in the 'Model Evaluation' section.")
-
-#         # Function to limit tokens to 100 words
-#         def limit_tokens(tokens, tags, pos_tags=None, limit=100):
-#             if len(tokens) > limit:
-#                 if pos_tags:
-#                     return tokens[:limit], tags[:limit], pos_tags[:limit]
-#                 return tokens[:limit], tags[:limit]
-#             if pos_tags:
-#                 return tokens, tags, pos_tags
-#             return tokens, tags
-
-#         # Show sentences (limited to 100 words)
-#         st.subheader("Sample Sentences (Limited to 100 words)")
-#         getter = SentenceGetter(structured_df)
-
-#         # Select random sentences to display
-#         import random
-
-#         num_samples = min(5, len(getter.sentences))
-#         sample_indices = random.sample(range(len(getter.sentences)), num_samples)
-
-#         for idx in sample_indices:
-#             sent = getter.sentences[idx]
-#             tokens = sent2tokens(sent)
-#             tags = sent2labels(sent)
-#             pos_tags = [pos for _, pos, _ in sent]
-
-#             # Limit tokens and tags to 100 words
-#             if len(tokens) > 100:
-#                 tokens, tags, pos_tags = limit_tokens(tokens, tags, pos_tags, 100)
-
-#             st.markdown(f"**Sentence {idx}:** {' '.join(tokens)}")
-
-#             # Show POS tags if available
-#             if use_pos_tagging:
-#                 pos_display = ", ".join(
-#                     [f"{t}({p})" for t, p in zip(tokens, pos_tags) if p]
-#                 )
-#                 st.markdown(f"**POS Tags:** {pos_display}")
-
-#             html_output = visualize_ner_blocks(tokens, tags)
-#             st.html(html_output)
-
-#             if len(tokens) > 100:
-#                 st.info(f"Showing first 100 words out of {len(tokens)} total words.")
-#             st.markdown("---")
-            
-            
 elif page == "Model Training":
     st.title("Model Training")
 
@@ -1342,7 +1133,7 @@ elif page == "Model Evaluation":
                         )
                         st.markdown("---")
                         
-elif page == "Interactive Annotation":
+elif page == "Analysis text":
     st.title("NER Text Analysis")
 
     # Model selection
@@ -1419,7 +1210,7 @@ elif page == "Interactive Annotation":
                 for token, pos in zip(tokens, pos_tags):
                     pos_html += f"""
                     <div style='display:inline-block; margin-right:10px; margin-bottom:8px; text-align:center;'>
-                        <div style='padding:5px 8px; background-color:#ffffff; border:1px solid #dddddd; border-radius:4px 4px 0 0; font-weight:bold;'>{token}</div>
+                        <div style='padding:5px 8px; background-color:#ffffff; color:black `;border:1px solid #dddddd; border-radius:4px 4px 0 0; font-weight:bold;'>{token}</div>
                         <div style='padding:3px 8px; background-color:#4b5563; color:white; border-radius:0 0 4px 4px; font-size:0.8em; font-weight:bold;'>{pos}</div>
                     </div>
                     """
@@ -1442,8 +1233,6 @@ elif page == "Interactive Annotation":
                         with cols[i % len(cols)]:
                             st.metric(entity, count)
 
-                # Visualize the predictions
-                st.subheader("Named Entities")
                 st.html(
                     visualize_ner_blocks(tokens, predictions, "Identified Entities")
                 )
