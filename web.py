@@ -32,7 +32,7 @@ if not os.path.exists("models"):
 st.sidebar.title("NER Analysis")
 page = st.sidebar.selectbox(
     "Choose a page",
-    ["Data Explorer", "Model Training", "Model Evaluation", "Analysis text"],
+    ["Data Explorer", "Model Training", "Model Evaluation", "Text Analysis"],
 )
 
 
@@ -1133,7 +1133,7 @@ elif page == "Model Evaluation":
                         )
                         st.markdown("---")
                         
-elif page == "Analysis text":
+elif page == "Text Analysis":
     st.title("NER Text Analysis")
 
     # Model selection
@@ -1210,8 +1210,8 @@ elif page == "Analysis text":
                 for token, pos in zip(tokens, pos_tags):
                     pos_html += f"""
                     <div style='display:inline-block; margin-right:10px; margin-bottom:8px; text-align:center;'>
-                        <div style='padding:5px 8px; background-color:#ffffff; color:black `;border:1px solid #dddddd; border-radius:4px 4px 0 0; font-weight:bold;'>{token}</div>
-                        <div style='padding:3px 8px; background-color:#4b5563; color:white; border-radius:0 0 4px 4px; font-size:0.8em; font-weight:bold;'>{pos}</div>
+                        <div style='padding:5px 8px; background-color:#f0f0f0; color:#000000; border:1px solid #dddddd; border-radius:4px 4px 0 0; font-weight:bold;'>{token}</div>
+                        <div style='padding:3px 8px; background-color:#3366cc; color:white; border-radius:0 0 4px 4px; font-size:0.8em; font-weight:bold;'>{pos}</div>
                     </div>
                     """
                 st.html(f"<div style='line-height:2.5;'>{pos_html}</div>")
