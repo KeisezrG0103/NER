@@ -2011,44 +2011,33 @@ elif page == "Model Evaluation":
                                     # Classification report based on selected scheme
                                     if evaluation_scheme == "IOB2":
                                         from seqeval.scheme import IOB2
-
                                         # Convert tags if needed
                                         report = seq_classification_report(
                                             y_test, y_pred, scheme=IOB2, digits=4
                                         )
                                         f1 = f1_score(
-                                            y_test,
-                                            y_pred,
-                                            average="weighted",
-                                            scheme=IOB2,
+                                            y_test, y_pred, average="weighted", scheme=IOB2
                                         )
                                     elif evaluation_scheme == "BILOU":
                                         from seqeval.scheme import BILOU
-
                                         report = seq_classification_report(
                                             y_test, y_pred, scheme=BILOU, digits=4
                                         )
                                         f1 = f1_score(
-                                            y_test,
-                                            y_pred,
-                                            average="weighted",
-                                            scheme=BILOU,
+                                            y_test, y_pred, average="weighted", scheme=BILOU
                                         )
                                     else:
                                         report = seq_classification_report(
                                             y_test, y_pred, digits=4, scheme=None
                                         )
                                         f1 = f1_score(
-                                            y_test,
-                                            y_pred,
-                                            average="weighted",
-                                            scheme=None,
+                                            y_test, y_pred, average="weighted", scheme=None
                                         )
 
                                     st.text(report)
                                     st.metric("Weighted F1 Score", f"{f1:.4f}")
 
-                                    # Flat classification report from sklearn-crfsuite
+                                    # Flat classification report from sklearn-crfsuite - FIXED
                                     st.subheader("Flat Token Classification Report")
                                     flat_report = metrics.flat_classification_report(
                                         y_test, y_pred, labels=labels, digits=4
@@ -2058,7 +2047,7 @@ elif page == "Model Evaluation":
                                 with eval_tabs[2]:
                                     st.subheader("Per-class Metrics")
 
-                                    # Calculate per-class precision, recall, F1
+                                    # Calculate per-class precision, recall, F1 - FIXED
                                     sorted_labels = sorted(labels)
                                     class_metrics = metrics.flat_classification_report(
                                         y_test,
@@ -2068,48 +2057,44 @@ elif page == "Model Evaluation":
                                         digits=4,
                                     )
 
-                                    # Filter out non-class entries
-                                    class_df = pd.DataFrame(
-                                        {
-                                            k: v
-                                            for k, v in class_metrics.items()
-                                            if k in sorted_labels
-                                        }
-                                    ).T
+                                    # Filter out non-class entries (like 'accuracy', 'macro avg', etc.)
+                                    class_df = pd.DataFrame({
+                                        k: v for k, v in class_metrics.items() 
+                                        if k in sorted_labels and isinstance(v, dict)
+                                    }).T
 
                                     # Add color formatting
                                     def color_scale(val):
-                                        # Colors optimized for dark mode backgrounds
-                                        if isinstance(
-                                            val, (int, float)
-                                        ) and not pd.isna(val):
+                                        if isinstance(val, (int, float)) and not pd.isna(val):
                                             if val > 0.9:
-                                                return "background-color: #22543d; color: #e6ffe6;"  # Deep green bg, light text
+                                                return "background-color: #22543d; color: #e6ffe6;"
                                             elif val > 0.7:
-                                                return "background-color: #2a4365; color: #e0eaff;"  # Deep blue bg, light text
+                                                return "background-color: #2a4365; color: #e0eaff;"
                                             elif val > 0.5:
-                                                return "background-color: #744210; color: #ffe6cc;"  # Deep orange bg, light text
+                                                return "background-color: #744210; color: #ffe6cc;"
                                             else:
-                                                return "background-color: #742a2a; color: #ffeaea;"  # Deep red bg, light text
+                                                return "background-color: #742a2a; color: #ffeaea;"
                                         return ""
 
-                                    # Display styled dataframe
-                                    st.dataframe(
-                                        class_df.style.format("{:.4f}").applymap(
-                                            color_scale,
-                                            subset=["precision", "recall", "f1-score"],
+                                    # Display styled dataframe if we have data
+                                    if not class_df.empty:
+                                        st.dataframe(
+                                            class_df.style.format("{:.4f}").applymap(
+                                                color_scale,
+                                                subset=["precision", "recall", "f1-score"],
+                                            )
                                         )
-                                    )
 
-                                    # F1 Score by class visualization
-                                    fig, ax = plt.subplots(figsize=(10, 6))
-                                    class_df["f1-score"].sort_values().plot(
-                                        kind="barh", ax=ax
-                                    )
-                                    plt.title("F1 Score by Entity Type")
-                                    plt.xlabel("F1 Score")
-                                    st.pyplot(fig)
-
+                                        # F1 Score by class visualization
+                                        if "f1-score" in class_df.columns:
+                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                            class_df["f1-score"].sort_values().plot(kind="barh", ax=ax)
+                                            plt.title("F1 Score by Entity Type")
+                                            plt.xlabel("F1 Score")
+                                            st.pyplot(fig)
+                                            plt.close(fig)
+                                    else:
+                                        st.info("No per-class metrics available for the selected labels.")
                                 with eval_tabs[3]:
                                     st.subheader("Confusion Matrix")
 
