@@ -16,6 +16,7 @@ from seqeval.metrics import classification_report as seq_classification_report
 from seqeval.metrics import f1_score
 from seqeval.scheme import IOB2
 import base64
+from sklearn_crfsuite.utils import flatten
 
 # Page configuration
 st.set_page_config(
@@ -2051,15 +2052,13 @@ elif page == "Model Evaluation":
                                     st.subheader("Per-class Metrics")
 
                                     try:
-                                        # Calculate per-class precision, recall, F1 - FIXED
                                         sorted_labels = sorted(labels)
                                         
-                                        # Get classification report as dictionary - IMPORTANT: set output_dict=True
                                         class_metrics = metrics.flat_classification_report(
                                             y_test,
                                             y_pred,
                                             labels=sorted_labels,
-                                            output_dict=True,  # This is crucial!
+                                            output_dict=True, 
                                             digits=4,
                                         )
 
