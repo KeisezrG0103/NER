@@ -2040,7 +2040,8 @@ elif page == "Model Evaluation":
                                     # Flat classification report from sklearn-crfsuite - FIXED
                                     st.subheader("Flat Token Classification Report")
                                     flat_report = metrics.flat_classification_report(
-                                        y_test, y_pred, labels=labels, digits=4
+                                        y_test, y_pred, labels=labels
+                                        # ,digits=4
                                     )
                                     st.text(flat_report)
 
@@ -2053,8 +2054,8 @@ elif page == "Model Evaluation":
                                         y_test,
                                         y_pred,
                                         labels=sorted_labels,
-                                        output_dict=True,
-                                        digits=4,
+                                        # output_dict=True,
+                                        # digits=4,
                                     )
 
                                     # Filter out non-class entries (like 'accuracy', 'macro avg', etc.)
