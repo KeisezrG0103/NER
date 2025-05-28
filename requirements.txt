@@ -8,3 +8,5 @@ seqeval==1.2.2
 python-crfsuite==0.9.9
 nltk>=3.8.1
 id_nusantara-1.1.tar.gz
+sklearn-crfsuite==0.3.6
+eli5
