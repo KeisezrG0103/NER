@@ -2039,63 +2039,114 @@ elif page == "Model Evaluation":
 
                                     # Flat classification report from sklearn-crfsuite - FIXED
                                     st.subheader("Flat Token Classification Report")
-                                    flat_report = metrics.flat_classification_report(
-                                        y_test, y_pred, labels=labels
-                                        # ,digits=4
-                                    )
-                                    st.text(flat_report)
+                                    try:
+                                        flat_report = metrics.flat_classification_report(
+                                            y_test, y_pred, labels=labels, digits=4
+                                        )
+                                        st.text(flat_report)
+                                    except Exception as e:
+                                        st.warning(f"Could not generate flat classification report: {e}")
 
                                 with eval_tabs[2]:
                                     st.subheader("Per-class Metrics")
 
-                                    # Calculate per-class precision, recall, F1 - FIXED
-                                    sorted_labels = sorted(labels)
-                                    class_metrics = metrics.flat_classification_report(
-                                        y_test,
-                                        y_pred,
-                                        labels=sorted_labels,
-                                        # output_dict=True,
-                                        # digits=4,
-                                    )
-
-                                    # Filter out non-class entries (like 'accuracy', 'macro avg', etc.)
-                                    class_df = pd.DataFrame({
-                                        k: v for k, v in class_metrics.items() 
-                                        if k in sorted_labels and isinstance(v, dict)
-                                    }).T
-
-                                    # Add color formatting
-                                    def color_scale(val):
-                                        if isinstance(val, (int, float)) and not pd.isna(val):
-                                            if val > 0.9:
-                                                return "background-color: #22543d; color: #e6ffe6;"
-                                            elif val > 0.7:
-                                                return "background-color: #2a4365; color: #e0eaff;"
-                                            elif val > 0.5:
-                                                return "background-color: #744210; color: #ffe6cc;"
-                                            else:
-                                                return "background-color: #742a2a; color: #ffeaea;"
-                                        return ""
-
-                                    # Display styled dataframe if we have data
-                                    if not class_df.empty:
-                                        st.dataframe(
-                                            class_df.style.format("{:.4f}").applymap(
-                                                color_scale,
-                                                subset=["precision", "recall", "f1-score"],
-                                            )
+                                    try:
+                                        # Calculate per-class precision, recall, F1 - FIXED
+                                        sorted_labels = sorted(labels)
+                                        
+                                        # Get classification report as dictionary - IMPORTANT: set output_dict=True
+                                        class_metrics = metrics.flat_classification_report(
+                                            y_test,
+                                            y_pred,
+                                            labels=sorted_labels,
+                                            output_dict=True,  # This is crucial!
+                                            digits=4,
                                         )
 
-                                        # F1 Score by class visualization
-                                        if "f1-score" in class_df.columns:
-                                            fig, ax = plt.subplots(figsize=(10, 6))
-                                            class_df["f1-score"].sort_values().plot(kind="barh", ax=ax)
-                                            plt.title("F1 Score by Entity Type")
-                                            plt.xlabel("F1 Score")
-                                            st.pyplot(fig)
-                                            plt.close(fig)
-                                    else:
-                                        st.info("No per-class metrics available for the selected labels.")
+                                        # Convert to DataFrame - only include actual class labels
+                                        class_data = {}
+                                        for label in sorted_labels:
+                                            if label in class_metrics and isinstance(class_metrics[label], dict):
+                                                class_data[label] = class_metrics[label]
+                                        
+                                        if class_data:
+                                            class_df = pd.DataFrame(class_data).T
+
+                                            # Add color formatting
+                                            def color_scale(val):
+                                                if isinstance(val, (int, float)) and not pd.isna(val):
+                                                    if val > 0.9:
+                                                        return "background-color: #22543d; color: #e6ffe6;"
+                                                    elif val > 0.7:
+                                                        return "background-color: #2a4365; color: #e0eaff;"
+                                                    elif val > 0.5:
+                                                        return "background-color: #744210; color: #ffe6cc;"
+                                                    else:
+                                                        return "background-color: #742a2a; color: #ffeaea;"
+                                                return ""
+
+                                            # Display styled dataframe if we have data
+                                            st.dataframe(
+                                                class_df.style.format("{:.4f}").applymap(
+                                                    color_scale,
+                                                    subset=["precision", "recall", "f1-score"] if all(col in class_df.columns for col in ["precision", "recall", "f1-score"]) else []
+                                                )
+                                            )
+
+                                            # F1 Score by class visualization
+                                            if "f1-score" in class_df.columns:
+                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                class_df["f1-score"].sort_values().plot(kind="barh", ax=ax)
+                                                plt.title("F1 Score by Entity Type")
+                                                plt.xlabel("F1 Score")
+                                                plt.tight_layout()
+                                                st.pyplot(fig)
+                                                plt.close(fig)
+                                        else:
+                                            st.info("No per-class metrics available for the selected labels.")
+                                            
+                                    except Exception as e:
+                                        st.warning(f"Could not generate per-class metrics: {e}")
+                                        st.info("Falling back to text-based classification report...")
+                                        
+                                        # Fallback: show text-based classification report
+                                        try:
+                                            flat_report_text = metrics.flat_classification_report(
+                                                y_test, y_pred, labels=sorted_labels, digits=4
+                                            )
+                                            st.text(flat_report_text)
+                                        except Exception as fallback_error:
+                                            st.error(f"Classification report also failed: {fallback_error}")
+                                            
+                                            # Final fallback: show basic entity-level accuracy
+                                            y_true_flat = list(chain.from_iterable(y_test))
+                                            y_pred_flat = list(chain.from_iterable(y_pred))
+                                            
+                                            # Calculate accuracy per entity type
+                                            entity_accuracy = {}
+                                            for true_tag, pred_tag in zip(y_true_flat, y_pred_flat):
+                                                if true_tag != "O":
+                                                    entity_type = true_tag.split("-")[1] if "-" in true_tag else true_tag
+                                                    if entity_type not in entity_accuracy:
+                                                        entity_accuracy[entity_type] = {"correct": 0, "total": 0}
+                                                    entity_accuracy[entity_type]["total"] += 1
+                                                    if true_tag == pred_tag:
+                                                        entity_accuracy[entity_type]["correct"] += 1
+                                            
+                                            # Display basic accuracy metrics
+                                            if entity_accuracy:
+                                                accuracy_data = []
+                                                for entity_type, stats in entity_accuracy.items():
+                                                    accuracy = stats["correct"] / stats["total"] if stats["total"] > 0 else 0
+                                                    accuracy_data.append({
+                                                        "Entity Type": entity_type,
+                                                        "Accuracy": f"{accuracy:.4f}",
+                                                        "Correct": stats["correct"],
+                                                        "Total": stats["total"]
+                                                    })
+                                                
+                                                accuracy_df = pd.DataFrame(accuracy_data)
+                                                st.dataframe(accuracy_df)
                                 with eval_tabs[3]:
                                     st.subheader("Confusion Matrix")
 
@@ -2316,7 +2367,7 @@ elif page == "Model Evaluation":
                             for j, (token, true_tag, pred_tag) in enumerate(
                                 zip(tokens, y_t, y_p)
                             ):
-                                eval_df = eval_df.append(
+                                eval_df = eval_df._append(
                                     {
                                         "Sentence": i,
                                         "Token": token,
