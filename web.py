@@ -2006,71 +2006,85 @@ elif page == "Model Evaluation":
                                         "Sequence Accuracy", f"{sequence_accuracy:.4f}"
                                     )
 
-                                with eval_tabs[1]:
-                                    st.subheader("Detailed Metrics")
 
-                                    # Classification report based on selected scheme
-                                    if evaluation_scheme == "IOB2":
-                                        from seqeval.scheme import IOB2
-                                        # Convert tags if needed
-                                        report = seq_classification_report(
-                                            y_test, y_pred, scheme=IOB2, digits=4
-                                        )
-                                        f1 = f1_score(
-                                            y_test, y_pred, average="weighted", scheme=IOB2
-                                        )
-                                    elif evaluation_scheme == "BILOU":
-                                        from seqeval.scheme import BILOU
-                                        report = seq_classification_report(
-                                            y_test, y_pred, scheme=BILOU, digits=4
-                                        )
-                                        f1 = f1_score(
-                                            y_test, y_pred, average="weighted", scheme=BILOU
-                                        )
-                                    else:
-                                        report = seq_classification_report(
-                                            y_test, y_pred, digits=4, scheme=None
-                                        )
-                                        f1 = f1_score(
-                                            y_test, y_pred, average="weighted", scheme=None
-                                        )
+                                    with eval_tabs[1]:
+                                        st.subheader("Detailed Metrics")
 
-                                    st.text(report)
-                                    st.metric("Weighted F1 Score", f"{f1:.4f}")
+                                        # Classification report based on selected scheme
+                                        if evaluation_scheme == "IOB2":
+                                            from seqeval.scheme import IOB2
+                                            # Convert tags if needed
+                                            report = seq_classification_report(
+                                                y_test, y_pred, scheme=IOB2, digits=4
+                                            )
+                                            f1 = f1_score(
+                                                y_test, y_pred, average="weighted", scheme=IOB2
+                                            )
+                                        elif evaluation_scheme == "BILOU":
+                                            from seqeval.scheme import BILOU
+                                            report = seq_classification_report(
+                                                y_test, y_pred, scheme=BILOU, digits=4
+                                            )
+                                            f1 = f1_score(
+                                                y_test, y_pred, average="weighted", scheme=BILOU
+                                            )
+                                        else:
+                                            report = seq_classification_report(
+                                                y_test, y_pred, digits=4, scheme=None
+                                            )
+                                            f1 = f1_score(
+                                                y_test, y_pred, average="weighted", scheme=None
+                                            )
 
-                                    # Flat classification report from sklearn-crfsuite - FIXED
-                                    st.subheader("Flat Token Classification Report")
-                                    try:
-                                        flat_report = metrics.flat_classification_report(
-                                            y_test, y_pred, labels=labels, digits=4
-                                        )
-                                        st.text(flat_report)
-                                    except Exception as e:
-                                        st.warning(f"Could not generate flat classification report: {e}")
+                                        st.text(report)
+                                        st.metric("Weighted F1 Score", f"{f1:.4f}")
 
-                                with eval_tabs[2]:
-                                    st.subheader("Per-class Metrics")
+                                        # Manual token-level classification report using sklearn
+                                        st.subheader("Token-level Classification Report")
+                                        try:
+                                            from sklearn.metrics import classification_report
+                                            
+                                            # Flatten the sequences
+                                            y_test_flat = list(chain.from_iterable(y_test))
+                                            y_pred_flat = list(chain.from_iterable(y_pred))
+                                            
+                                            # Use sklearn's classification_report
+                                            sklearn_report = classification_report(
+                                                y_test_flat, y_pred_flat, labels=labels, digits=4
+                                            )
+                                            st.text(sklearn_report)
+                                        except Exception as e:
+                                            st.warning(f"Could not generate token-level classification report: {e}")
 
-                                    try:
-                                        sorted_labels = sorted(labels)
-                                        
-                                        class_metrics = metrics.flat_classification_report(
-                                            y_test,
-                                            y_pred,
-                                            labels=sorted_labels,
-                                            output_dict=True, 
-                                            digits=4,
-                                        )
+                                    with eval_tabs[2]:
+                                        st.subheader("Per-class Metrics")
 
-                                        # Convert to DataFrame - only include actual class labels
-                                        class_data = {}
-                                        for label in sorted_labels:
-                                            if label in class_metrics and isinstance(class_metrics[label], dict):
-                                                class_data[label] = class_metrics[label]
-                                        
-                                        if class_data:
-                                            class_df = pd.DataFrame(class_data).T
-
+                                        try:
+                                            from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+                                            
+                                            # Flatten the sequences
+                                            y_test_flat = list(chain.from_iterable(y_test))
+                                            y_pred_flat = list(chain.from_iterable(y_pred))
+                                            
+                                            sorted_labels = sorted(labels)
+                                            
+                                            # Calculate precision, recall, f1-score for each class
+                                            precision, recall, f1, support = precision_recall_fscore_support(
+                                                y_test_flat, y_pred_flat, labels=sorted_labels, average=None, zero_division=0
+                                            )
+                                            
+                                            # Create DataFrame manually
+                                            class_data = []
+                                            for i, label in enumerate(sorted_labels):
+                                                class_data.append({
+                                                    'precision': precision[i] if i < len(precision) else 0,
+                                                    'recall': recall[i] if i < len(recall) else 0,
+                                                    'f1-score': f1[i] if i < len(f1) else 0,
+                                                    'support': support[i] if i < len(support) else 0
+                                                })
+                                            
+                                            class_df = pd.DataFrame(class_data, index=sorted_labels)
+                                            
                                             # Add color formatting
                                             def color_scale(val):
                                                 if isinstance(val, (int, float)) and not pd.isna(val):
@@ -2084,16 +2098,21 @@ elif page == "Model Evaluation":
                                                         return "background-color: #742a2a; color: #ffeaea;"
                                                 return ""
 
-                                            # Display styled dataframe if we have data
+                                            # Display styled dataframe
                                             st.dataframe(
-                                                class_df.style.format("{:.4f}").applymap(
+                                                class_df.style.format({
+                                                    'precision': '{:.4f}',
+                                                    'recall': '{:.4f}',
+                                                    'f1-score': '{:.4f}',
+                                                    'support': '{:.0f}'
+                                                }).applymap(
                                                     color_scale,
-                                                    subset=["precision", "recall", "f1-score"] if all(col in class_df.columns for col in ["precision", "recall", "f1-score"]) else []
+                                                    subset=["precision", "recall", "f1-score"]
                                                 )
                                             )
 
                                             # F1 Score by class visualization
-                                            if "f1-score" in class_df.columns:
+                                            if not class_df.empty and 'f1-score' in class_df.columns:
                                                 fig, ax = plt.subplots(figsize=(10, 6))
                                                 class_df["f1-score"].sort_values().plot(kind="barh", ax=ax)
                                                 plt.title("F1 Score by Entity Type")
@@ -2101,21 +2120,10 @@ elif page == "Model Evaluation":
                                                 plt.tight_layout()
                                                 st.pyplot(fig)
                                                 plt.close(fig)
-                                        else:
-                                            st.info("No per-class metrics available for the selected labels.")
-                                            
-                                    except Exception as e:
-                                        st.warning(f"Could not generate per-class metrics: {e}")
-                                        st.info("Falling back to text-based classification report...")
-                                        
-                                        # Fallback: show text-based classification report
-                                        try:
-                                            flat_report_text = metrics.flat_classification_report(
-                                                y_test, y_pred, labels=sorted_labels, digits=4
-                                            )
-                                            st.text(flat_report_text)
-                                        except Exception as fallback_error:
-                                            st.error(f"Classification report also failed: {fallback_error}")
+                                                
+                                        except Exception as e:
+                                            st.warning(f"Could not generate per-class metrics: {e}")
+                                            st.info("Falling back to basic accuracy calculation...")
                                             
                                             # Final fallback: show basic entity-level accuracy
                                             y_true_flat = list(chain.from_iterable(y_test))
