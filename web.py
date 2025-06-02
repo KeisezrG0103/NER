@@ -1114,6 +1114,7 @@ elif page == "Model Training":
                         # Initialize loss tracking
                         training_losses = []
                         validation_losses = []
+                        import random
 
                         # Train with periodic validation
                         model_path = f"models/{model_name}.crfsuite"
