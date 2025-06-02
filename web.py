@@ -1131,11 +1131,41 @@ elif page == "Model Training":
                             
                             # Get training loss
                             if hasattr(trainer.logparser, 'iterations') and trainer.logparser.iterations:
-                                current_loss = trainer.logparser.iterations[-1].get('loss', 0)
-                                training_losses.append(current_loss)
+                                # Get raw CRF loss (log-likelihood loss)
+                                raw_loss = trainer.logparser.iterations[-1].get('loss', 0)
+                                
+                                # Store the raw loss but don't display it directly
+                                training_losses.append(raw_loss)
+                                
+                                # For display purposes, use a normalized value or calculate error rate on train sample
+                                # This section checks a sample of training data to get comparable error rate
+                                if i % 5 == 0 or i == max_iterations - 1:  # Only calculate periodically to save time
+                                    # Get a sample of training data for comparable metric
+                                    train_sample_size = min(200, len(X_train))
+                                    train_indices = random.sample(range(len(X_train)), train_sample_size)
+                                    X_train_sample = [X_train[idx] for idx in train_indices]
+                                    y_train_sample = [y_train[idx] for idx in train_indices]
+                                    
+                                    # Calculate training error rate on sample
+                                    train_errors = 0
+                                    train_total = 0
+                                    
+                                    for x_seq, y_seq in zip(X_train_sample, y_train_sample):
+                                        y_train_pred = tagger.tag(x_seq)
+                                        for y_true, y_p in zip(y_seq, y_train_pred):
+                                            train_total += 1
+                                            if y_true != y_p:
+                                                train_errors += 1
+                                    
+                                    # Calculate train error rate (comparable to validation error rate)
+                                    train_error_rate = train_errors / train_total if train_total > 0 else 0
+                                    current_loss = train_error_rate  # Use this for display
+                                else:
+                                    # Use previous train error rate if not calculating this iteration
+                                    current_loss = training_losses[-2] if len(training_losses) > 1 else 0.5
                             else:
-                                current_loss = 0
-                                training_losses.append(0)
+                                current_loss = 0.5  # Default starting value if no loss info
+                                training_losses.append(current_loss)
                             
                             # Evaluate on validation sample (only every 5 iterations to speed up)
                             if i % 5 == 0 or i == max_iterations - 1:
@@ -1165,10 +1195,13 @@ elif page == "Model Training":
                             
                             # Update progress display
                             progress_bar.progress((i + 1) / max_iterations)
+                            
+                            # Show both raw CRF loss and error rate
+                            raw_crf_loss = training_losses[-1]
                             status_text.text(
                                 f"Iteration {i+1}/{max_iterations}: "
-                                f"Train Loss = {current_loss:.5f}, "
-                                f"Val Loss = {validation_losses[-1]:.5f}"
+                                f"Train Error = {current_loss:.5f}, "
+                                f"Val Error = {validation_losses[-1]:.5f}"
                             )
                             
                             # Plot the learning curves (not too frequently)
