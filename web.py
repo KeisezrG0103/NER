@@ -17,7 +17,6 @@ from seqeval.metrics import f1_score
 from seqeval.scheme import IOB2
 import base64
 from sklearn_crfsuite.utils import flatten
-import random
 
 # Page configuration
 st.set_page_config(
@@ -1029,7 +1028,6 @@ elif page == "Model Training":
                 "C2 (L2 regularization)", 0.0, 0.1, 0.0001, 0.0001
             )  # Lower default
             model_name = st.text_input("Model Name", "ner_model")
-            batch_size = st.slider("Training Batch Size", 50, 500, 200, 50)
 
         # Sample size
         max_sample = min(10000, len(sentences))
@@ -1058,22 +1056,13 @@ elif page == "Model Training":
 
         if st.session_state.model_trained:
             with st.spinner(f"Training on {len(train_sentences)} sentences..."):
-                # Create directory for models if it doesn't exist
-                if not os.path.exists("models"):
-                    os.makedirs("models")
-                    
                 # Prepare features and labels
-                with st.spinner("Preparing features..."):
-                    X_train = [sent2features(s) for s in train_sentences]
-                    y_train = [sent2labels(s) for s in train_sentences]
-                    
-                    # Prepare validation data (in smaller batches if needed)
-                    X_val = []
-                    y_val = []
-                    for i in range(0, len(val_sentences), batch_size):
-                        batch = val_sentences[i:i+batch_size]
-                        X_val.extend([sent2features(s) for s in batch])
-                        y_val.extend([sent2labels(s) for s in batch])
+                X_train = [sent2features(s) for s in train_sentences]
+                y_train = [sent2labels(s) for s in train_sentences]
+
+                # Prepare validation data
+                X_val = [sent2features(s) for s in val_sentences]
+                y_val = [sent2labels(s) for s in val_sentences]
 
                 # Debug output
                 st.write(f"Number of training instances: {len(X_train)}")
@@ -1082,190 +1071,164 @@ elif page == "Model Training":
                 if not X_train or not y_train:
                     st.error("No valid training data. Please check your dataset.")
                 else:
-                    try:
-                        # Initialize trainer
-                        trainer = pycrfsuite.Trainer(verbose=True)
+                    # Initialize trainer
+                    trainer = pycrfsuite.Trainer(
+                        verbose=True
+                    )  # Set verbose to True for debugging
 
-                        # Add training instances (in batches for large datasets)
-                        with st.spinner("Adding training instances..."):
-                            for i in range(0, len(X_train), batch_size):
-                                for xseq, yseq in zip(X_train[i:i+batch_size], y_train[i:i+batch_size]):
-                                    trainer.append(xseq, yseq)
+                    # Add training instances
+                    for xseq, yseq in zip(X_train, y_train):
+                        trainer.append(xseq, yseq)
 
-                        # Set parameters
-                        trainer.set_params({
+                    # Set parameters
+                    trainer.set_params(
+                        {
+                            "c1": c1,
+                            "c2": c2,
+                            "max_iterations": max_iterations,
+                            "feature.possible_transitions": True,
+                        }
+                    )
+
+                    # Progress display
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    loss_plot = st.empty()
+
+                    # Calculate validation metric incrementally during training
+                    # This uses a more reliable approach with temporary models
+                    # for each evaluation point
+                    def train_with_validation():
+                        # Store the original trainer reference
+                        original_trainer = trainer  # Save reference to the outer trainer
+                        
+                        for i in range(max_iterations):
+                            # Train for a single iteration
+                            temp_model_path = f"models/temp_{i}.crfsuite"
+                            
+                            # Set max_iterations to current iteration + 1
+                            params = original_trainer.get_params()  # Use original_trainer
+                            params["max_iterations"] = i + 1
+                            original_trainer.set_params(params)  # Use original_trainer
+                            
+                            # Train model up to this iteration
+                            original_trainer.train(temp_model_path)  # Use original_trainer
+                            
+                            # Get training loss for this iteration
+                            if hasattr(original_trainer.logparser, 'iterations') and original_trainer.logparser.iterations:
+                                current_loss = original_trainer.logparser.iterations[-1].get('loss', 0)
+                                st.session_state.training_losses.append(current_loss)
+                            
+                            # Calculate validation error rate
+                            temp_tagger = pycrfsuite.Tagger()
+                            temp_tagger.open(temp_model_path)
+                            
+                            # Track validation metrics
+                            val_errors = 0
+                            val_total = 0
+                            
+                            # Evaluate on validation set
+                            for x_seq, y_seq in zip(X_val, y_val):
+                                y_pred = temp_tagger.tag(x_seq)
+                                for y_true, y_p in zip(y_seq, y_pred):
+                                    val_total += 1
+                                    if y_true != y_p:
+                                        val_errors += 1
+                            
+                            # Calculate validation error rate
+                            val_loss = val_errors / val_total if val_total > 0 else 0
+                            st.session_state.validation_losses.append(val_loss)
+                            
+                            # Update progress display
+                            progress_bar.progress((i + 1) / max_iterations)
+                            status_text.text(
+                                f"Iteration {i+1}/{max_iterations}: "
+                                f"Train Loss = {current_loss:.5f}, "
+                                f"Val Loss = {val_loss:.5f}"
+                            )
+                            
+                            # Plot the learning curves
+                            fig, ax = plt.subplots(figsize=(10, 6))
+                            iters = list(range(1, len(st.session_state.training_losses) + 1))
+                            
+                            ax.plot(iters, st.session_state.training_losses, 'b-', label='Training Loss')
+                            ax.plot(iters, st.session_state.validation_losses, 'r-', label='Validation Loss')
+                            
+                            ax.set_xlabel('Iteration')
+                            ax.set_ylabel('Loss')
+                            ax.set_title('Training and Validation Loss')
+                            ax.legend()
+                            ax.grid(True)
+                            
+                            loss_plot.pyplot(fig)
+                            plt.close(fig)
+                            
+                            # Clean up temporary model file
+                            if os.path.exists(temp_model_path):
+                                os.remove(temp_model_path)
+                            
+                        # Final model training
+                        model_path = f"models/{model_name}.crfsuite"
+                        final_trainer = pycrfsuite.Trainer(verbose=False)  # Use a different name
+                        
+                        # Add all training instances again for final model
+                        for xseq, yseq in zip(X_train, y_train):
+                            final_trainer.append(xseq, yseq)
+                        
+                        # Set parameters for full training
+                        final_trainer.set_params({
                             "c1": c1,
                             "c2": c2,
                             "max_iterations": max_iterations,
                             "feature.possible_transitions": True,
                         })
+                        
+                        # Train final model
+                        final_trainer.train(model_path)
+                        
+                        return model_path
 
-                        # Progress display
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        loss_plot = st.empty()
-                        
-                        # Calculate validation subset for faster evaluation
-                        val_sample_size = min(500, len(X_val))  # Limit validation sample size
-                        val_indices = random.sample(range(len(X_val)), val_sample_size)
-                        X_val_sample = [X_val[i] for i in val_indices]
-                        y_val_sample = [y_val[i] for i in val_indices]
+                    # Train with incremental validation
+                    try:
+                        final_model_path = train_with_validation()
+                        st.success(
+                            f"Model trained successfully and saved as {final_model_path}"
+                        )
 
-                        # Initialize loss tracking
-                        training_losses = []
-                        validation_losses = []
-
-                        # Train with periodic validation
-                        model_path = f"models/{model_name}.crfsuite"
-                        
-                        # Train the model with periodic evaluation
-                        for i in range(max_iterations):
-                            # Set current iteration
-                            params = trainer.get_params()
-                            params["max_iterations"] = 1
-                            trainer.set_params(params)
-                            
-                            # Train for one iteration
-                            temp_model_path = f"models/temp_{i}.crfsuite"
-                            trainer.train(temp_model_path)
-                            
-                            # Get training loss
-                            if hasattr(trainer.logparser, 'iterations') and trainer.logparser.iterations:
-                                # Get raw CRF loss (log-likelihood loss)
-                                raw_loss = trainer.logparser.iterations[-1].get('loss', 0)
-                                
-                                # Store the raw loss but don't display it directly
-                                training_losses.append(raw_loss)
-                                
-                                # For display purposes, use a normalized value or calculate error rate on train sample
-                                # This section checks a sample of training data to get comparable error rate
-                                if i % 5 == 0 or i == max_iterations - 1:  # Only calculate periodically to save time
-                                    # Create a tagger from the current model
-                                    temp_tagger = pycrfsuite.Tagger()
-                                    temp_tagger.open(temp_model_path)
-                                    
-                                    # Get a sample of training data for comparable metric
-                                    train_sample_size = min(200, len(X_train))
-                                    train_indices = random.sample(range(len(X_train)), train_sample_size)
-                                    X_train_sample = [X_train[idx] for idx in train_indices]
-                                    y_train_sample = [y_train[idx] for idx in train_indices]
-                                    
-                                    # Calculate training error rate on sample
-                                    train_errors = 0
-                                    train_total = 0
-                                    
-                                    for x_seq, y_seq in zip(X_train_sample, y_train_sample):
-                                        y_train_pred = temp_tagger.tag(x_seq)
-                                        for y_true, y_p in zip(y_seq, y_train_pred):
-                                            train_total += 1
-                                            if y_true != y_p:
-                                                train_errors += 1
-                                    
-                                    # Calculate train error rate (comparable to validation error rate)
-                                    train_error_rate = train_errors / train_total if train_total > 0 else 0
-                                    current_loss = train_error_rate  # Use this for display
-                                else:
-                                    # Use previous train error rate if not calculating this iteration
-                                    current_loss = training_losses[-2] if len(training_losses) > 1 else 0.5
-                            else:
-                                current_loss = 0.5  # Default starting value if no loss info
-                                training_losses.append(current_loss)
-                            
-                            # Evaluate on validation sample (only every 5 iterations to speed up)
-                            if i % 5 == 0 or i == max_iterations - 1:
-                                temp_tagger = pycrfsuite.Tagger()
-                                temp_tagger.open(temp_model_path)
-                                
-                                # Track validation metrics
-                                val_errors = 0
-                                val_total = 0
-                                
-                                # Check only on the sample
-                                for x_seq, y_seq in zip(X_val_sample, y_val_sample):
-                                    y_pred = temp_tagger.tag(x_seq)
-                                    for y_true, y_p in zip(y_seq, y_pred):
-                                        val_total += 1
-                                        if y_true != y_p:
-                                            val_errors += 1
-                                
-                                # Calculate validation error rate
-                                val_loss = val_errors / val_total if val_total > 0 else 0
-                                validation_losses.append(val_loss)
-                                
-                                # Fill in missing validation values
-                                if len(validation_losses) < len(training_losses):
-                                    # Use the last validation value for missing iterations
-                                    validation_losses.extend([val_loss] * (len(training_losses) - len(validation_losses)))
-                            
-                            # Update progress display
-                            progress_bar.progress((i + 1) / max_iterations)
-                            
-                            # Show both raw CRF loss and error rate
-                            raw_crf_loss = training_losses[-1]
-                            status_text.text(
-                                f"Iteration {i+1}/{max_iterations}: "
-                                f"Train Error = {current_loss:.5f}, "
-                                f"Val Error = {validation_losses[-1]:.5f}"
-                            )
-                            
-                            # Plot the learning curves (not too frequently)
-                            if i % 5 == 0 or i == max_iterations - 1:
-                                fig, ax = plt.subplots(figsize=(10, 6))
-                                iters = list(range(1, len(training_losses) + 1))
-                                
-                                ax.plot(iters, training_losses, 'b-', label='Training Loss')
-                                ax.plot(iters, validation_losses, 'r-', label='Validation Loss')
-                                
-                                ax.set_xlabel('Iteration')
-                                ax.set_ylabel('Loss')
-                                ax.set_title('Training and Validation Loss')
-                                ax.legend()
-                                ax.grid(True)
-                                
-                                loss_plot.pyplot(fig)
-                                plt.close(fig)
-                            
-                            # Clean up temporary model file
-                            if os.path.exists(temp_model_path) and i < max_iterations - 1:
-                                os.remove(temp_model_path)
-                        
-                        # Rename final model
-                        if os.path.exists(temp_model_path):
-                            os.rename(temp_model_path, model_path)
-                        
-                        # Save the losses to session state
-                        st.session_state.training_losses = training_losses
-                        st.session_state.validation_losses = validation_losses
-                        
-                        st.success(f"Model trained successfully and saved as {model_path}")
-                        
                         # Reset flag
                         st.session_state.model_trained = False
-                        
+
                         # Show final metrics
-                        if training_losses and validation_losses:
+                        if (
+                            st.session_state.training_losses
+                            and st.session_state.validation_losses
+                        ):
                             col1, col2, col3 = st.columns(3)
                             with col1:
                                 st.metric(
                                     "Final Training Loss",
-                                    f"{training_losses[-1]:.5f}",
+                                    f"{st.session_state.training_losses[-1]:.5f}",
                                 )
                             with col2:
                                 st.metric(
                                     "Final Validation Loss",
-                                    f"{validation_losses[-1]:.5f}",
+                                    f"{st.session_state.validation_losses[-1]:.5f}",
                                 )
                             with col3:
-                                best_val_loss = min(validation_losses)
-                                best_iter = validation_losses.index(best_val_loss) + 1
+                                best_val_loss = min(st.session_state.validation_losses)
+                                best_iter = (
+                                    st.session_state.validation_losses.index(
+                                        best_val_loss
+                                    )
+                                    + 1
+                                )
                                 st.metric(
                                     "Best Validation Loss",
                                     f"{best_val_loss:.5f} (Iter {best_iter})",
                                 )
-                    
+
                     except Exception as e:
                         st.error(f"Error during training: {str(e)}")
-                        st.exception(e)  # Show the full exception for debugging
                         st.session_state.model_trained = False
                     
 elif page == "Model Evaluation":
