@@ -1140,6 +1140,10 @@ elif page == "Model Training":
                                 # For display purposes, use a normalized value or calculate error rate on train sample
                                 # This section checks a sample of training data to get comparable error rate
                                 if i % 5 == 0 or i == max_iterations - 1:  # Only calculate periodically to save time
+                                    # Create a tagger from the current model
+                                    temp_tagger = pycrfsuite.Tagger()
+                                    temp_tagger.open(temp_model_path)
+                                    
                                     # Get a sample of training data for comparable metric
                                     train_sample_size = min(200, len(X_train))
                                     train_indices = random.sample(range(len(X_train)), train_sample_size)
@@ -1151,7 +1155,7 @@ elif page == "Model Training":
                                     train_total = 0
                                     
                                     for x_seq, y_seq in zip(X_train_sample, y_train_sample):
-                                        y_train_pred = tagger.tag(x_seq)
+                                        y_train_pred = temp_tagger.tag(x_seq)
                                         for y_true, y_p in zip(y_seq, y_train_pred):
                                             train_total += 1
                                             if y_true != y_p:
