@@ -1011,7 +1011,6 @@ elif page == "Model Training":
                 st.pyplot(fig)
 
         # Get sentences
-        # Get sentences
         getter = SentenceGetter(train_df)
         sentences = getter.sentences
 
@@ -1115,7 +1114,6 @@ elif page == "Model Training":
                         # Initialize loss tracking
                         training_losses = []
                         validation_losses = []
-                        
 
                         # Train with periodic validation
                         model_path = f"models/{model_name}.crfsuite"
