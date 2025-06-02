@@ -17,6 +17,7 @@ from seqeval.metrics import f1_score
 from seqeval.scheme import IOB2
 import base64
 from sklearn_crfsuite.utils import flatten
+import random
 
 # Page configuration
 st.set_page_config(
@@ -1114,7 +1115,7 @@ elif page == "Model Training":
                         # Initialize loss tracking
                         training_losses = []
                         validation_losses = []
-                        import random
+                        
 
                         # Train with periodic validation
                         model_path = f"models/{model_name}.crfsuite"
